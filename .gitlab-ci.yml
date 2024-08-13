@@ -1,0 +1,103 @@
+include:
+  - project: gitlab/include
+    file:
+      - ci/template-build-image.yml
+      - helmfile.yml
+      - git.yml
+      - java.yml
+      - ci/scanner.yml
+
+stages:
+  - build
+  - image
+  - scan
+  - deploy
+
+variables:
+  K8S_HOST: ${CI_PROJECT_NAME}.${K8S_DOMAIN}
+  JAVA_OUT: ${CI_PROJECT_DIR}/java_out
+  SEMGREP_ID: ce315152-438a-421e-b3ae-7411bd545fe0
+  TRIVY_IMAGE_ID: fe3d5ef3-5197-4225-afbe-36a057cdd83b
+
+build:
+  stage: build
+  tags: [ $GITLAB_RUNNER ]
+  image: ${JAVA_IMAGE}
+  script:
+    - gradle build --no-daemon
+    - mkdir -p ${JAVA_OUT}
+    - cp $CI_PROJECT_DIR/build/libs/*.jar ${JAVA_OUT}/
+  artifacts:
+    paths:
+      - $JAVA_OUT
+  rules:
+    - when: on_success
+
+build-image:
+  stage: image
+  extends: .build-image
+  variables:
+    DOCKER_TAG: "${CI_COMMIT_REF_SLUG}"
+    DOCKER_FOLDER: ${CI_PROJECT_DIR}/bitrix-control/docker/java
+    GIT_CLONE_REPO: https://git01.loodsen.ru/sphere2/portal/bitrix-control.git
+  before_script:
+    - !reference [ .git-clone-repo ]
+    - rsync -a ${CI_PROJECT_DIR}/java_out/ $DOCKER_FOLDER/java_out/
+    - export JAVA_APP=$(find java_out -iname *.jar | head -n 1)
+    - export DOCKER_PARAMETERS="--build-arg=ARG_JAVA_APP=${JAVA_APP}"
+  rules:
+    - if: $CI_COMMIT_REF_NAME !~ /^(master|develop)$/
+      when: never
+    - when: on_success
+  needs:
+    - job: build
+      optional: true
+      artifacts: true
+
+semgrep:
+  extends: .run-scanner
+  script:
+    - !reference [.scan-code-semgrep]
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+
+trivy-image:
+  extends: .run-scanner
+  script:
+    - !reference [.docker-scan]
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+
+.deploy:
+  tags: [ k8s-$K8S_CLUSTER ]
+  image: ${ANSIBLE_IMAGE}
+  stage: deploy
+  script:
+    - !reference [ .git-clone-repo ]
+    - !reference [ .helmfile ]
+  variables:
+    K8S_CLUSTER: "99"
+    K8S_NAMESPACE: sphere2-dev
+    K8S_PROJECT_NAME: ${CI_PROJECT_NAME}
+    K8S_PROJECT_IMAGE: "${REGISTRY_HOST}/${CI_PROJECT_PATH}:${CI_COMMIT_REF_SLUG}"
+    K8S_DOMAIN: k8s.ldsn.dev
+    GIT_CLONE_REPO: https://git01.loodsen.ru/sphere2/portal/bitrix-control.git
+    HELMFILE: java.yml
+    HELMFILE_DIR: ${CI_PROJECT_DIR}/bitrix-control/helmfile
+    JAVA_TOOL_OPTIONS: "-Dspring.profiles.active=${ACTIVE_PROFILES}"
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_REF_NAME !~ /^(master|develop)$/
+      when: never
+    - if: $CI_COMMIT_REF_NAME == "develop"
+      when: on_success
+    - when: manual
+  needs:
+    - job: build-image
+      optional: true
+      artifacts: false
+
+stage:
+  extends: .deploy
+  variables:
+    ACTIVE_PROFILES: stage
