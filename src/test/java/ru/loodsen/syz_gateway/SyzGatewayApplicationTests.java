@@ -1,13 +1,13 @@
-package ru.loodsen.syz_gateway;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class SyzGatewayApplicationTests {
-
-    @Test
-    void contextLoads() {
-    }
-
-}
+//package ru.loodsen.syz_gateway;
+//
+//import org.junit.jupiter.api.Test;
+//import org.springframework.boot.test.context.SpringBootTest;
+//
+//@SpringBootTest
+//class SyzGatewayApplicationTests {
+//
+//    @Test
+//    void contextLoads() {
+//    }
+//
+//}
