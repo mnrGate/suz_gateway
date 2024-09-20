@@ -1,0 +1,53 @@
+repositories:
+- name: loodsen
+  url: https://registry.loodsen.ru/repository/helm.hosted
+  username: {{ env "REGISTRY_USER" }}
+  password: {{ env "REGISTRY_PASS" }}
+
+releases:
+- name: {{ env "K8S_PROJECT_NAME" }}
+  namespace: {{ env "K8S_NAMESPACE" }}
+  chart: loodsen/compose
+  version: 1.0.0
+  values:
+  - application: {{ env "K8S_PROJECT_NAME" }}
+    container:
+    - name: {{ env "K8S_PROJECT_NAME" }}
+      image: {{ env "K8S_PROJECT_IMAGE" }}
+    env:
+    {{ if ne (env "JAVA_APP") "" }}
+    - name: JAVA_APP
+      value: {{ env "JAVA_APP" }}
+    {{ end }}
+    {{ if ne (env "JAVA_TOOL_OPTIONS") "" }}
+    - name: JAVA_TOOL_OPTIONS
+      value: {{ env "JAVA_TOOL_OPTIONS" }}
+    {{ end }}
+    - name: CI_PROJECT_URL
+      value: {{ env "CI_PROJECT_URL" }}
+    - name: CI_COMMIT_REF
+      value: {{ env "CI_COMMIT_REF_NAME" }}
+    - name: CI_COMMIT_SHA
+      value: {{ env "CI_COMMIT_SHA" }}
+    - name: JWT_SECRET_KEY
+      value: {{ env "JWT_SECRET_KEY" | default "cB6wc7sQlApHUqu2x3RWrPrlQqNuCi7W" }}
+    - name: ISSUER_URI
+      value: {{ env "ISSUER_URI" }}
+    - name: JWK_SET_URI
+      value: {{ env "JWK_SET_URI" }}
+    - name: ALLOWED_ORIGINS
+      value: {{ env "ALLOWED_ORIGINS" }}
+    - name: KEYCLOAK_URL
+      value: {{ env "KEYCLOAK_URL" }}
+    - name: PERMIT_ALL_URIS
+      value: {{ env "PERMIT_ALL_URIS" }}
+    network:
+    - name: http
+      port: 8080
+    ingress:
+    - https: true
+      cert: {{ env "K8S_DOMAIN" }}-tls
+      hosts:
+      - host: {{ env "K8S_HOST" }}
+        location:
+        - path: /
